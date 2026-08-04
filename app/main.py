@@ -37,8 +37,10 @@ from .core.storage import GCSStorage, LocalStorage, StorageBackend
 from .middleware import AuditMiddleware
 from .routers import (
     admin_router,
+    ai_policies_router,
     audit_router,
     auth_router,
+    data_manager_router,
     examples_router,
     health_router,
     items_router,
@@ -150,6 +152,13 @@ api_router.include_router(audit_router)
 
 # Item CRUD operations
 api_router.include_router(items_router)
+
+# Data Manager — live registry of connected systems (channel/system of
+# record/human loop/Auto platform) and their health status
+api_router.include_router(data_manager_router)
+
+# AI Policies — policy CRUD + evaluation engine
+api_router.include_router(ai_policies_router)
 
 # Authorization pattern examples
 api_router.include_router(examples_router)

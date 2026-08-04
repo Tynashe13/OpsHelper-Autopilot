@@ -32,7 +32,7 @@ from ..models.policy import Policy as PolicyModel
 from ..models.policy import PolicyEvaluation
 from ..schemas.policy import PolicyAction, PolicyEvaluationResult
 from .audit import audit
-from .llm_client import complete_json
+from .auto_client import complete_json
 
 log = logging.getLogger(__name__)
 
@@ -178,7 +178,8 @@ async def _evaluate_natural_language(instruction: str, record: dict) -> tuple[bo
     The LLM-backed counterpart to _evaluate_dsl above — used when a policy
     doesn't have a DSL (policy_type == "natural_language"). Builds one
     prompt combining the policy's instruction text and the record's data,
-    sends it to Claude via complete_json (see llm_client.py), and unpacks
+    sends it to Auto's LLM Judgment workflow via complete_json (see
+    auto_client.py), and unpacks
     the structured JSON response.
     """
     user_prompt = f"POLICY:\n{instruction}\n\nRECORD:\n{record}"
