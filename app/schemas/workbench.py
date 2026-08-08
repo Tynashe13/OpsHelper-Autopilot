@@ -129,3 +129,44 @@ class EscalateWorkbenchItemRequest(BaseModel):
 
     escalated_to: str
     reason: Optional[str] = None
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator ingest — routers/orchestrator.py's request/response shapes live
+# here rather than a separate schemas/orchestrator.py because there's no
+# orchestrator-specific data model of its own; every field on
+# OrchestratorEventResponse is either raw pass-through or a Workbench shape
+# above — there's no orchestrator-specific data model of its own.
+# ---------------------------------------------------------------------------
+
+
+class OrchestratorEventRequest(BaseModel):
+    """What you POST to /api/orchestrator/events. `entity_name` picks
+    which policies apply (see policy_engine.py's query filter — identical
+    meaning to EvaluateRequest.entity_name in schemas/policy.py).
+    `record` is the actual business data — a recovery plan's cost/timing,
+    a disruption notice's fields, whatever `entity_name` represents.
+    `source` is a free-text label for where this event came from (e.g.
+    "orchestrator.events" for a manual/API call, "supabase_poller" for
+    the automatic poller) — stored on the resulting audit log entries and
+    Workbench item, purely for traceability."""
+
+    entity_name: str
+    record: dict
+    source: Optional[str] = None
+
+
+class OrchestratorEventResponse(BaseModel):
+    """The full trace of what happened to one event: every policy
+    evaluation that ran, Triage's decision, and the resulting Workbench
+    item if one was created — so a caller (or the frontend's "Simulate
+    Disruption" button) can see the whole chain from one response instead
+    of piecing it together from three separate endpoints."""
+
+    entity_name: str
+    matched_count: int
+    evaluations: list[dict]
+    triage_action: str  # 'auto_resolve' | 'route_to_workbench' | 'escalate' | 'no_action'
+    triage_reason: str
+    workbench_item: Optional[WorkbenchItemResponse] = None
+    auto_resolution: Optional[dict] = None

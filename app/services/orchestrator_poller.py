@@ -88,6 +88,20 @@ def poll_once() -> None:
     try:
         source_row = _get_source_row(db)
         since = source_row.last_polled_at if source_row else None
+        # DEFENSIVE NORMALIZATION — found by actually running this against
+        # a stand-in DB, not assumed: last_polled_at is written as a
+        # timezone-aware datetime (latest_updated_at() below always
+        # produces one), but reading a DateTime(timezone=True) column back
+        # doesn't reliably preserve tzinfo across every driver (SQLite in
+        # particular hands back a naive datetime). A naive `since` compared
+        # against Supabase's aware `received_at` values in the SQL WHERE
+        # clause below silently mis-compares at the exact boundary — the
+        # row exactly at the cursor re-qualifies as ">" since (its string
+        # form sorts after a tz-stripped one) and gets reprocessed on
+        # every subsequent poll, forever. Force UTC-aware here so the
+        # comparison is correct regardless of what the driver returned.
+        if since is not None and since.tzinfo is None:
+            since = since.replace(tzinfo=timezone.utc)
 
         try:
             rows = fetch_new_records(since, limit=_DEFAULT_LIMIT_PER_TICK)
