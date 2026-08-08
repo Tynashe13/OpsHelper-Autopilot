@@ -48,6 +48,7 @@ from .routers import (
     workbench_router,
 )
 from .security import get_current_user, verify_access
+from .services.orchestrator_poller import start_poller, stop_poller
 from .services.workbench_scheduler import start_scheduler, stop_scheduler
 
 log = logging.getLogger(__name__)
@@ -194,6 +195,28 @@ async def _start_workbench_scheduler() -> None:
 @app.on_event("shutdown")
 async def _stop_workbench_scheduler() -> None:
     stop_scheduler()
+
+
+# =============================================================================
+# ORCHESTRATOR SUPABASE POLLER
+# =============================================================================
+# Starts the APScheduler background job (checks every
+# ORCHESTRATOR_POLL_INTERVAL_SECONDS, default 30s) that reads new rows from
+# the Supabase system-of-record table and feeds them through the same
+# Policy Engine -> decide -> Workbench pipeline the manual
+# POST /api/orchestrator/events endpoint uses — see
+# services/orchestrator_poller.py. No-ops entirely if SUPABASE_DB_URL isn't
+# set, so an app without Supabase configured behaves exactly as before.
+
+
+@app.on_event("startup")
+async def _start_orchestrator_poller() -> None:
+    start_poller()
+
+
+@app.on_event("shutdown")
+async def _stop_orchestrator_poller() -> None:
+    stop_poller()
 
 
 # =============================================================================

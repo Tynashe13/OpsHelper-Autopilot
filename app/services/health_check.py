@@ -122,6 +122,39 @@ async def _check_slack(endpoint_url: str | None, config: str | None) -> tuple[st
         return DataSourceStatus.DOWN, None, str(exc)
 
 
+async def _check_supabase(endpoint_url: str | None, config: str | None) -> tuple[str, float | None, str | None]:
+    """
+    Unlike every other checker here, this doesn't use httpx at all —
+    "reachable" for a database connection means "a real query against it
+    succeeds," not "an HTTP endpoint responds," so this opens the same
+    engine services/system_of_record.py uses (core/supabase_db.py) and
+    runs a trivial `SELECT 1`. SUPABASE_DB_URL absent is UNCONFIGURED
+    (not yet set up), same convention as every other credential-based
+    checker in this file — a real connection/query failure is DOWN.
+    """
+    from sqlalchemy import text
+
+    from ..core.supabase_db import SupabaseNotConfiguredError, get_supabase_session_factory
+
+    try:
+        session_factory = get_supabase_session_factory()
+    except SupabaseNotConfiguredError as exc:
+        return DataSourceStatus.UNCONFIGURED, None, str(exc)
+
+    start = time.perf_counter()
+    session = session_factory()
+    try:
+        session.execute(text("SELECT 1"))
+        latency_ms = (time.perf_counter() - start) * 1000
+        if latency_ms > DEGRADED_LATENCY_MS:
+            return DataSourceStatus.DEGRADED, latency_ms, "Slow response"
+        return DataSourceStatus.HEALTHY, latency_ms, None
+    except Exception as exc:  # noqa: BLE001 — connection errors, auth errors, bad SUPABASE_DB_URL, etc.
+        return DataSourceStatus.DOWN, None, str(exc)
+    finally:
+        session.close()
+
+
 # This dictionary is what makes the whole file "pluggable": it maps a
 # system_type string (like "slack") to the Python function that knows how
 # to check it. `check_data_source()` below just looks up the right function
@@ -130,6 +163,7 @@ async def _check_slack(endpoint_url: str | None, config: str | None) -> tuple[st
 CHECKERS: dict[str, Callable] = {
     "auto": _check_auto_platform,
     "slack": _check_slack,
+    "supabase": _check_supabase,
 }
 
 

@@ -88,6 +88,15 @@ class DataSource(Base):
     latency_ms = Column(Float, nullable=True)
     error_message = Column(Text, nullable=True)  # human-readable reason if status isn't "healthy"
 
+    # High-water mark for the Orchestrator poller (services/orchestrator_poller.py)
+    # — only meaningful for the system_of_record row(s) it actually polls.
+    # Stores the max `updated_at` seen in the last successfully-processed
+    # batch from Supabase (see services/system_of_record.latest_updated_at),
+    # NOT this app's own clock — see that function's docstring for why.
+    # Null means "never successfully polled yet" -> the poller fetches the
+    # oldest rows first rather than assuming everything is new.
+    last_polled_at = Column(DateTime(timezone=True), nullable=True)
+
     # `server_default=func.now()` means Postgres itself fills this in when a
     # row is inserted (more reliable than setting it from Python, since it
     # can't be skipped by accident). `onupdate=func.now()` on updated_at
