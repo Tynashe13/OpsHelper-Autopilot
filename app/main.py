@@ -16,17 +16,35 @@ All endpoint logic has been organized into routers:
 - routers/items.py - Item CRUD operations
 - routers/audit.py - Audit log viewing & export
 - routers/examples.py - Authorization pattern examples
+- routers/data_manager.py - Integration registry & health status
+- routers/ai_policies.py - Policy CRUD + runtime evaluation engine
+- routers/workbench.py - Human review queue (approve/reject/modify/escalate)
+- routers/orchestrator.py - Live ingest: wires Policy Engine + Triage
+  together, this is what actually populates Workbench from a real event
 
 AUDIT SYSTEM:
 - Every API request is automatically logged via AuditMiddleware
 - Custom audit logging available via `from app.services.audit import audit`
 - View logs at /api/admin/audit, export via /api/admin/audit/export
 - See app/models/audit.py for full documentation
+
+BACKGROUND SCHEDULER:
+- app/services/workbench_scheduler.py runs a 1-minute interval check for
+  overdue Workbench items (retry with increasing urgency, then escalate to
+  a different target once max_retries is exhausted). Started/stopped via
+  this file's `lifespan` context manager, not a request handler.
+- app/services/orchestrator_poller.py runs a 30-second (configurable)
+  interval check for new rows on the Supabase system-of-record table,
+  feeding each one through the same Policy Engine + Triage + Workbench
+  chain POST /api/orchestrator/events uses — the "automatic" counterpart
+  to that manual endpoint. No-ops cleanly if SUPABASE_DB_URL isn't set.
+  Also started/stopped via `lifespan`.
 """
 
 import io
 import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -53,6 +71,32 @@ from .services.workbench_scheduler import start_scheduler, stop_scheduler
 
 log = logging.getLogger(__name__)
 
+
+# =============================================================================
+# LIFESPAN — starts/stops the Workbench retry/escalation background check
+# =============================================================================
+#
+# The scheduler (app/services/workbench_scheduler.py) needs to run for the
+# entire lifetime of the app, independent of any single request — this is
+# FastAPI's modern replacement for the old @app.on_event("startup")/
+# ("shutdown") decorators. Everything before `yield` runs once at startup;
+# everything after runs once at shutdown.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_scheduler()
+    # Orchestrator poller — reads new Supabase system-of-record rows on an
+    # interval and feeds them through the same Policy Engine -> Triage ->
+    # Workbench chain POST /api/orchestrator/events uses. No-ops cleanly
+    # if SUPABASE_DB_URL isn't set (see services/orchestrator_poller.py),
+    # so this is safe to always start regardless of whether Supabase is
+    # configured in this environment.
+    start_poller()
+    log.info("Application startup complete.")
+    yield
+    stop_poller()
+    stop_scheduler()
+    log.info("Application shutdown complete.")
+
 # =============================================================================
 # BASE PATH CONFIGURATION
 # =============================================================================
@@ -78,6 +122,7 @@ app = FastAPI(
     docs_url=f"{BASE_PATH}/api/docs",
     redoc_url=f"{BASE_PATH}/api/redoc",
     openapi_url=f"{BASE_PATH}/api/openapi.json",
+    lifespan=lifespan,
 )
 
 # =============================================================================
@@ -164,59 +209,17 @@ api_router.include_router(data_manager_router)
 # AI Policies — policy CRUD + evaluation engine
 api_router.include_router(ai_policies_router)
 
-# Workbench — human-in-the-loop resolution of routed exceptions
+# Workbench — human review queue for triaged exceptions (Round 2 mandatory
+# requirement #4)
 api_router.include_router(workbench_router)
 
-# Orchestrator — live ingest endpoint: Policy Engine result -> decision ->
-# only routes to Workbench when a human is actually needed. This is the
-# wire connecting Policy Engine and Workbench that neither pillar alone
-# provided.
+# Orchestrator — live ingest endpoint that wires Policy Engine + Triage
+# together (Round 2 mandatory requirement #3's runtime evaluation, plus
+# what actually populates Workbench for requirement #4)
 api_router.include_router(orchestrator_router)
 
 # Authorization pattern examples
 api_router.include_router(examples_router)
-
-
-# =============================================================================
-# WORKBENCH RETRY/ESCALATION SCHEDULER
-# =============================================================================
-# Starts the APScheduler background job (checks every 1 minute) that
-# advances the retry/escalation clock on pending Workbench items — see
-# services/workbench_scheduler.py. Started/stopped with the app itself so
-# it's running for the whole life of the process, not tied to any one
-# request.
-
-
-@app.on_event("startup")
-async def _start_workbench_scheduler() -> None:
-    start_scheduler()
-
-
-@app.on_event("shutdown")
-async def _stop_workbench_scheduler() -> None:
-    stop_scheduler()
-
-
-# =============================================================================
-# ORCHESTRATOR SUPABASE POLLER
-# =============================================================================
-# Starts the APScheduler background job (checks every
-# ORCHESTRATOR_POLL_INTERVAL_SECONDS, default 30s) that reads new rows from
-# the Supabase system-of-record table and feeds them through the same
-# Policy Engine -> decide -> Workbench pipeline the manual
-# POST /api/orchestrator/events endpoint uses — see
-# services/orchestrator_poller.py. No-ops entirely if SUPABASE_DB_URL isn't
-# set, so an app without Supabase configured behaves exactly as before.
-
-
-@app.on_event("startup")
-async def _start_orchestrator_poller() -> None:
-    start_poller()
-
-
-@app.on_event("shutdown")
-async def _stop_orchestrator_poller() -> None:
-    stop_poller()
 
 
 # =============================================================================

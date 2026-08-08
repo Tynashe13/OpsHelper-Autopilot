@@ -122,24 +122,31 @@ async def _check_slack(endpoint_url: str | None, config: str | None) -> tuple[st
         return DataSourceStatus.DOWN, None, str(exc)
 
 
+# This dictionary is what makes the whole file "pluggable": it maps a
+# system_type string (like "slack") to the Python function that knows how
+# to check it. `check_data_source()` below just looks up the right function
+# and calls it — adding a new integration later means adding one function
+# above and one line here, nothing else in the app needs to change.
 async def _check_supabase(endpoint_url: str | None, config: str | None) -> tuple[str, float | None, str | None]:
     """
-    Unlike every other checker here, this doesn't use httpx at all —
-    "reachable" for a database connection means "a real query against it
-    succeeds," not "an HTTP endpoint responds," so this opens the same
-    engine services/system_of_record.py uses (core/supabase_db.py) and
-    runs a trivial `SELECT 1`. SUPABASE_DB_URL absent is UNCONFIGURED
-    (not yet set up), same convention as every other credential-based
-    checker in this file — a real connection/query failure is DOWN.
+    Unlike the generic ping, this actually exercises the real read path —
+    a trivial `SELECT 1` against the configured Supabase connection
+    (core/supabase_db.py), not just an HTTP GET against some URL. This is
+    what lets the "Orders & Inventory Store" DataSource row genuinely
+    show "healthy" only once the system-of-record connection actually
+    works, not just once a URL is typed into a config field somewhere.
     """
-    from sqlalchemy import text
-
+    # Local import — avoids core/supabase_db.py (and its SQLAlchemy engine
+    # machinery) being imported at module load time for every process
+    # that imports health_check.py, even ones that never check Supabase.
     from ..core.supabase_db import SupabaseNotConfiguredError, get_supabase_session_factory
 
     try:
         session_factory = get_supabase_session_factory()
     except SupabaseNotConfiguredError as exc:
         return DataSourceStatus.UNCONFIGURED, None, str(exc)
+
+    from sqlalchemy import text
 
     start = time.perf_counter()
     session = session_factory()
@@ -149,17 +156,12 @@ async def _check_supabase(endpoint_url: str | None, config: str | None) -> tuple
         if latency_ms > DEGRADED_LATENCY_MS:
             return DataSourceStatus.DEGRADED, latency_ms, "Slow response"
         return DataSourceStatus.HEALTHY, latency_ms, None
-    except Exception as exc:  # noqa: BLE001 — connection errors, auth errors, bad SUPABASE_DB_URL, etc.
+    except Exception as exc:  # noqa: BLE001 — any connection/auth/network failure lands here
         return DataSourceStatus.DOWN, None, str(exc)
     finally:
         session.close()
 
 
-# This dictionary is what makes the whole file "pluggable": it maps a
-# system_type string (like "slack") to the Python function that knows how
-# to check it. `check_data_source()` below just looks up the right function
-# and calls it — adding a new integration later means adding one function
-# above and one line here, nothing else in the app needs to change.
 CHECKERS: dict[str, Callable] = {
     "auto": _check_auto_platform,
     "slack": _check_slack,
