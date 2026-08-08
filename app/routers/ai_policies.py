@@ -33,7 +33,7 @@ from ..schemas.policy import (
 )
 from ..security import get_current_user
 from ..services.audit import audit
-from ..services.auto_client import complete_json
+from ..services.llm_client import complete_json
 from ..services.policy_engine import evaluate_policies_for_entity
 
 log = logging.getLogger(__name__)

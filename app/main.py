@@ -44,8 +44,10 @@ from .routers import (
     examples_router,
     health_router,
     items_router,
+    workbench_router,
 )
 from .security import get_current_user, verify_access
+from .services.workbench_scheduler import start_scheduler, stop_scheduler
 
 log = logging.getLogger(__name__)
 
@@ -160,8 +162,31 @@ api_router.include_router(data_manager_router)
 # AI Policies — policy CRUD + evaluation engine
 api_router.include_router(ai_policies_router)
 
+# Workbench — human-in-the-loop resolution of routed exceptions
+api_router.include_router(workbench_router)
+
 # Authorization pattern examples
 api_router.include_router(examples_router)
+
+
+# =============================================================================
+# WORKBENCH RETRY/ESCALATION SCHEDULER
+# =============================================================================
+# Starts the APScheduler background job (checks every 1 minute) that
+# advances the retry/escalation clock on pending Workbench items — see
+# services/workbench_scheduler.py. Started/stopped with the app itself so
+# it's running for the whole life of the process, not tied to any one
+# request.
+
+
+@app.on_event("startup")
+async def _start_workbench_scheduler() -> None:
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+async def _stop_workbench_scheduler() -> None:
+    stop_scheduler()
 
 
 # =============================================================================

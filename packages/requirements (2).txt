@@ -10,7 +10,6 @@ python-multipart
 email-validator
 openpyxl  # Excel export for audit logs
 apscheduler  # Workbench retry/escalation background clock — see app/services/workbench_scheduler.py
-anthropic  # Direct-Anthropic fallback for Policy Engine/Insights LLM judgment — see app/services/llm_client.py
 
 # Pin cryptography away from v48+. The 48.0.0 (May 2026) prebuilt
 # manylinux_2_34_aarch64 wheel uses ARM instructions that crash with SIGILL
