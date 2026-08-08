@@ -44,6 +44,7 @@ from .routers import (
     examples_router,
     health_router,
     items_router,
+    orchestrator_router,
     workbench_router,
 )
 from .security import get_current_user, verify_access
@@ -164,6 +165,12 @@ api_router.include_router(ai_policies_router)
 
 # Workbench — human-in-the-loop resolution of routed exceptions
 api_router.include_router(workbench_router)
+
+# Orchestrator — live ingest endpoint: Policy Engine result -> decision ->
+# only routes to Workbench when a human is actually needed. This is the
+# wire connecting Policy Engine and Workbench that neither pillar alone
+# provided.
+api_router.include_router(orchestrator_router)
 
 # Authorization pattern examples
 api_router.include_router(examples_router)

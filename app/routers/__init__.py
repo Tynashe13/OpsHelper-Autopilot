@@ -13,6 +13,7 @@ from .data_manager import router as data_manager_router
 from .examples import router as examples_router
 from .health import router as health_router
 from .items import router as items_router
+from .orchestrator import router as orchestrator_router
 from .workbench import router as workbench_router
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     "ai_policies_router",
     "data_manager_router",
     "workbench_router",
+    "orchestrator_router",
 ]
