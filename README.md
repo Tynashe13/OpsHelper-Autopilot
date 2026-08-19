@@ -177,15 +177,7 @@ OpsHelper-Autopilot/
 
 ---
 
-## Documentation
 
-| Document | Purpose |
-|----------|---------|
-| **[Session Handoff](SESSION_HANDOFF.md)** | Detailed record of the Round 3 merge — every bug found, how it was verified, and what's still open |
-| **[Command Center Guide](docs/command-center-guide.md)** | Original architecture guide from the hackathon template |
-| **[Hackathon Brief](docs/hackathon-brief.md)** | Problem statements, judging criteria |
-| **[Design System](docs/design-system-template.md)** | UI component patterns, colors, spacing |
-| **[Audit System](docs/Audit%20System%20Guide.md)** | Audit logging architecture — also what backs the Dashboard's live KPIs |
 
 ---
 
