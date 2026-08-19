@@ -55,6 +55,7 @@ from .core.storage import GCSStorage, LocalStorage, StorageBackend
 from .middleware import AuditMiddleware
 from .routers import (
     admin_router,
+    ai_manager_router,
     ai_policies_router,
     audit_router,
     auth_router,
@@ -62,6 +63,7 @@ from .routers import (
     data_manager_router,
     examples_router,
     health_router,
+    insights_router,
     items_router,
     orchestrator_router,
     workbench_router,
@@ -223,6 +225,14 @@ api_router.include_router(orchestrator_router)
 # AuditLog/WorkbenchItem data (see routers/dashboard.py's module
 # docstring for the full field-by-field mapping)
 api_router.include_router(dashboard_router)
+
+# AI Manager — chat/orchestration surface, talks to the live Auto
+# orchestrator via services/auto_client.py's trigger_orchestrator_run()
+api_router.include_router(ai_manager_router)
+
+# AI Insights — real patterns/summary generated from processed
+# WorkbenchItem/PolicyEvaluation data
+api_router.include_router(insights_router)
 
 # Authorization pattern examples
 api_router.include_router(examples_router)
