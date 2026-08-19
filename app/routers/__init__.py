@@ -10,6 +10,7 @@ from .ai_manager import router as ai_manager_router
 from .ai_policies import router as ai_policies_router
 from .audit import router as audit_router
 from .auth import router as auth_router
+from .dashboard import router as dashboard_router
 from .data_manager import router as data_manager_router
 from .examples import router as examples_router
 from .health import router as health_router
@@ -25,10 +26,11 @@ __all__ = [
     "audit_router",
     "items_router",
     "examples_router",
-    "ai_manager_router",
     "ai_policies_router",
     "data_manager_router",
     "workbench_router",
     "orchestrator_router",
+    "dashboard_router",
+    "ai_manager_router",
     "insights_router",
 ]

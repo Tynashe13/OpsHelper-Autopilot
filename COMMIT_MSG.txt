@@ -1,0 +1,35 @@
+﻿Merge Workbench/Orchestrator/Supabase poller + Dashboard; fix 3 real bugs found by running it
+
+Backend fixes to the existing Workbench/Policy Engine/Orchestrator pillar:
+- Removed a duplicate alembic migration (two separate files both added
+  last_polled_at to data_sources, creating two conflicting heads --
+  would have broken 'alembic upgrade head' outright)
+- Rewrote routers/orchestrator.py and services/orchestrator_engine.py --
+  a prior commit had mixed two incompatible versions of the Orchestrator
+  together (one expecting a triage_evaluation() function that was never
+  defined anywhere), so the app could not start at all. Now matches the
+  real, consistent shape used throughout services/triage.py and
+  routers/workbench.py.
+- Fixed the Supabase poller's default entity_name (was 'disruption_notice',
+  didn't match any seed policy's actual entity_name of 'recovery_plan' --
+  meant every Supabase-sourced record silently matched zero policies)
+- Fixed a timezone round-trip bug in the poller's incremental-fetch cursor
+  that caused duplicate processing on repeat polls
+
+New: Dashboard, built around the given frontend (frontend/src/app/page.tsx)
+- Added audit logging to orchestrator_engine.process_event() for every
+  outcome (auto-resolved, routed to a human, or failed) -- previously an
+  auto-resolved event left zero trace in the database, which made real
+  KPIs like "auto executed" or "failed" impossible to compute
+- app/schemas/dashboard.py -- matches the frontend's TypeScript interfaces
+  field-for-field
+- app/routers/dashboard.py -- GET /api/dashboard/summary, built entirely
+  from real AuditLog/WorkbenchItem data (no DisruptionRun table --
+  see the module docstring for the full field-by-field mapping)
+- services/system_of_record.py -- added count_table_rows() for the
+  live Supabase counts tile
+
+Verified end-to-end (not just written): ran real policies through the
+real /api/orchestrator/events endpoint, confirmed every AgentStats number
+matched what actually happened, and specifically forced a failure path
+to confirm it's tracked correctly. Frontend: npx tsc --noEmit clean.

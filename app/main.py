@@ -55,14 +55,13 @@ from .core.storage import GCSStorage, LocalStorage, StorageBackend
 from .middleware import AuditMiddleware
 from .routers import (
     admin_router,
-    ai_manager_router,
     ai_policies_router,
     audit_router,
     auth_router,
+    dashboard_router,
     data_manager_router,
     examples_router,
     health_router,
-    insights_router,
     items_router,
     orchestrator_router,
     workbench_router,
@@ -220,13 +219,10 @@ api_router.include_router(workbench_router)
 # what actually populates Workbench for requirement #4)
 api_router.include_router(orchestrator_router)
 
-# AI Manager — chat/orchestration surface that triggers the LIVE Auto
-# orchestrator + 5 Operators (built and verified directly on
-# auto.supervity.ai) and relays back its run trace
-api_router.include_router(ai_manager_router)
-
-# AI Insights — summarizes real Policy Evaluation / Workbench data
-api_router.include_router(insights_router)
+# Dashboard — live KPI summary for the home page, built from real
+# AuditLog/WorkbenchItem data (see routers/dashboard.py's module
+# docstring for the full field-by-field mapping)
+api_router.include_router(dashboard_router)
 
 # Authorization pattern examples
 api_router.include_router(examples_router)

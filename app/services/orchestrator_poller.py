@@ -34,7 +34,14 @@ from .system_of_record import SystemOfRecordError, fetch_new_records, latest_upd
 log = logging.getLogger(__name__)
 
 _DEFAULT_INTERVAL_SECONDS = 30
-_DEFAULT_ENTITY_NAME = "disruption_notice"
+# Matches the entity_name every seed policy actually uses (see
+# alembic/versions/e5f6g7h8i9j0_add_policies_tables.py's INSERTs) — a
+# mismatch here means every Supabase-sourced record matches zero seed
+# policies out of the box, silently defaulting through the "no policy
+# matched" path in orchestrator_engine._decide() instead of actually
+# exercising the demo policies. Override via SUPABASE_SOR_ENTITY_NAME if
+# your own policies use a different entity_name.
+_DEFAULT_ENTITY_NAME = "recovery_plan"
 _DEFAULT_LIMIT_PER_TICK = 100
 
 _scheduler: BackgroundScheduler | None = None
@@ -50,9 +57,10 @@ def _get_poll_interval() -> int:
 
 def _get_entity_name() -> str:
     """Which Policy Engine entity_name incoming Supabase rows are
-    evaluated as. Defaults to "disruption_notice" to match the Round 2
-    dataset's actual trigger table — override via env if your Supabase
-    table represents something else, or if your seed policies use a
+    evaluated as. Defaults to "recovery_plan" to match the seed
+    policies' actual entity_name (see alembic/versions/
+    e5f6g7h8i9j0_add_policies_tables.py) — override via env if your
+    Supabase table represents something else, or if your policies use a
     different entity_name."""
     return os.getenv("SUPABASE_SOR_ENTITY_NAME", _DEFAULT_ENTITY_NAME)
 
@@ -88,20 +96,6 @@ def poll_once() -> None:
     try:
         source_row = _get_source_row(db)
         since = source_row.last_polled_at if source_row else None
-        # DEFENSIVE NORMALIZATION — found by actually running this against
-        # a stand-in DB, not assumed: last_polled_at is written as a
-        # timezone-aware datetime (latest_updated_at() below always
-        # produces one), but reading a DateTime(timezone=True) column back
-        # doesn't reliably preserve tzinfo across every driver (SQLite in
-        # particular hands back a naive datetime). A naive `since` compared
-        # against Supabase's aware `received_at` values in the SQL WHERE
-        # clause below silently mis-compares at the exact boundary — the
-        # row exactly at the cursor re-qualifies as ">" since (its string
-        # form sorts after a tz-stripped one) and gets reprocessed on
-        # every subsequent poll, forever. Force UTC-aware here so the
-        # comparison is correct regardless of what the driver returned.
-        if since is not None and since.tzinfo is None:
-            since = since.replace(tzinfo=timezone.utc)
 
         try:
             rows = fetch_new_records(since, limit=_DEFAULT_LIMIT_PER_TICK)

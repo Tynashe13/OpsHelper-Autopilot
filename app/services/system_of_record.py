@@ -108,6 +108,19 @@ def fetch_new_records(since: Optional[datetime], limit: int = 100) -> list[dict]
     table = _get_table_name()
     id_col = _get_id_column()
     ts_col = _get_timestamp_column()
+
+    # Defensive normalization: a `DateTime(timezone=True)` column reliably
+    # round-trips its tzinfo on real Postgres/Supabase, but SQLite (used
+    # here to test this module without a live Supabase project — see
+    # module docstring) silently drops it, handing back a naive datetime.
+    # Comparing a naive `since` against this table's aware timestamps as
+    # raw strings breaks the WHERE filter below in exactly the way a
+    # naive-vs-aware mismatch always does — assume UTC (this app never
+    # stores anything else) rather than let that surface as silently
+    # re-fetching already-processed rows forever.
+    if since is not None and since.tzinfo is None:
+        since = since.replace(tzinfo=timezone.utc)
+
     session_factory = get_supabase_session_factory()  # raises SupabaseNotConfiguredError if unset
     session = session_factory()
     try:
@@ -183,3 +196,39 @@ def latest_updated_at(rows: list[dict]) -> Optional[datetime]:
     if latest.tzinfo is None:
         latest = latest.replace(tzinfo=timezone.utc)
     return latest
+
+
+def count_table_rows(table_env_var: str, default_table: str) -> Optional[int]:
+    """
+    A cheap `SELECT COUNT(*)` against an arbitrary Supabase table, used by
+    routers/dashboard.py for the "live counts across the business" tile
+    (suppliers, open disruption notices, inventory positions, shipments —
+    whatever tables you actually have). Each call is independent and
+    fail-soft: returns None (not 0) if Supabase isn't configured or the
+    query fails, so a caller can distinguish "we don't know" from
+    "genuinely zero rows" — same convention as fetch_new_records/
+    latest_updated_at in this module and services/health_check.py's
+    UNCONFIGURED vs DOWN distinction.
+
+    Deliberately a plain COUNT(*), not PostgREST's exact-count header
+    trick (which is what you'd reach for over Supabase's REST API) —
+    this app talks to Supabase as a direct Postgres connection (see
+    core/supabase_db.py's module docstring for why), so a straightforward
+    SQL count is both simpler and cheaper here than routing through REST
+    for something this connection can already do directly.
+    """
+    table = _get_identifier(table_env_var, default_table)
+    try:
+        session_factory = get_supabase_session_factory()
+    except SupabaseNotConfiguredError:
+        return None
+
+    session = session_factory()
+    try:
+        result = session.execute(text(f"SELECT COUNT(*) FROM {table}"))  # noqa: S608 — table validated above
+        return result.scalar()
+    except Exception as exc:  # noqa: BLE001 — missing table, auth failure, etc. — fail soft, not fatal
+        log.warning("count_table_rows failed for table '%s': %s", table, exc)
+        return None
+    finally:
+        session.close()
