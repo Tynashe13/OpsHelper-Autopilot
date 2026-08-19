@@ -177,7 +177,6 @@ OpsHelper-Autopilot/
 
 ---
 
-
 ## Tech Stack
 
 | Layer | Technology |
