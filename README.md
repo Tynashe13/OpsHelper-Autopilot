@@ -177,16 +177,6 @@ OpsHelper-Autopilot/
 
 ---
 
-## Documentation
-
-| Document | Purpose |
-|----------|---------|
-| [Command Center Guide](docs/command-center-guide.md) | Architecture overview |
-| [Hackathon Brief](docs/hackathon-brief.md) | Problem statements, judging criteria |
-| [Design System](docs/design-system-template.md) | UI component patterns, colors, spacing |
-| [Audit System](docs/Audit%20System%20Guide.md) | Audit logging architecture |
-
----
 
 ## Tech Stack
 
